@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import re
+import socket
 import sys
 import optparse
 import boto
@@ -34,7 +35,7 @@ def _domain_from_host(name):
     return name
 
 def parse_opts():
-    usage = "usage: %prog [options] desired_hostname [ec2_hostname]"
+    usage = "usage: %prog [options] fqdn target"
     parser = optparse.OptionParser(usage=usage)
 
     parser.add_option("-k", "--key", dest="key", help="Required")
@@ -56,22 +57,32 @@ def parse_opts():
     return (options, args)
 
 def main():
-    options, hostname_args = parse_opts()
+    options, args= parse_opts()
 
-    hostname_desired = _host_absolute(hostname_args[0])
+    hostname_desired = _host_absolute(args[0])
     domainname = _domain_from_host(hostname_desired)
-
-    if not domainname:
-        print "Unable to determine domainname from hostname"
-        sys.exit(1)
 
     # Deletion replaces the record with a CNAME to unreg.domain
     # This reduces negative caching without modifying the zone's TTL and
     # gives some indication of machines that have registered and since gone.
     if options.delete:
-        hostname_public = "unreg." + domainname
+        target = "unreg." + domainname
+        rrtype = "CNAME"
+
+    # New records are A records if target is IP, CNAME records if target is a
+    # fqdn.
     else:
-        hostname_public = _host_absolute(hostname_args[1])
+        target = args[1]
+        try:
+            socket.inet_aton(target)
+        except socket.error:
+            rrtype = "CNAME"
+        else:
+            rrtype = "A"
+
+    if not domainname:
+        print "Unable to determine domainname from hostname"
+        sys.exit(1)
 
     # Connect to route53 with AWS credentials from CLI.
     r53 = boto.connect_route53(aws_access_key_id=options.key,
@@ -101,9 +112,9 @@ def main():
         'alias_dns_name': None,
         'alias_hosted_zone_id': None,
         'name': hostname_desired,
-        'resource_records': [hostname_public],
+        'resource_records': [target],
         'ttl': options.ttl,
-        'type': 'CNAME'}
+        'type': rrtype }
 
     rr_desired_exists = False
     transaction = ResourceRecordSets(r53, zone_id)
@@ -118,8 +129,8 @@ def main():
             rr_change.ttl = rr.ttl
 
     if not rr_desired_exists:
-        rr_change = transaction.add_change("CREATE", hostname_desired, "CNAME")
-        rr_change.resource_records = [hostname_public]
+        rr_change = transaction.add_change("CREATE", hostname_desired, rrtype)
+        rr_change.resource_records = [target]
         rr_change.ttl = options.ttl
 
     if transaction.changes:
