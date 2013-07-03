@@ -38,8 +38,12 @@ def parse_opts():
     usage = "usage: %prog [options] fqdn target"
     parser = optparse.OptionParser(usage=usage)
 
-    parser.add_option("-k", "--key", dest="key", help="Required")
-    parser.add_option("-s", "--secret", dest="secret", help="Required")
+    parser.add_option("-k", "--key", dest="key",
+            default=boto.config.get("Credentials", "aws_access_key_id") or "",
+            help="AWS access ID")
+    parser.add_option("-s", "--secret", dest="secret",
+            default=boto.config.get("Credentials", "aws_secret_access_key") or "",
+            help="AWS secret key")
     parser.add_option("-t", "--ttl", dest="ttl", default="60")
     parser.add_option("-d", "--delete", dest="delete", action="store_true", default=False)
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False)
@@ -110,7 +114,6 @@ def main():
     # Dictionary representation of our desired record.
     rr_desired = {
         'alias_dns_name': None,
-        'alias_hosted_zone_id': None,
         'name': hostname_desired,
         'resource_records': [target],
         'ttl': options.ttl,
