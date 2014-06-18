@@ -94,7 +94,7 @@ def main():
 
     # Obtain hostedZone IDs that directly or indirectly parent our domainname.
     # Ugly manifestation from the current API/library.
-    zones = [ hz.Id.replace('/hostedzone/', '')
+    zones = [ hz
         for hz in r53.get_all_hosted_zones().ListHostedZonesResponse.HostedZones
         if re.search('\.?%s$' % re.escape(hz.Name), domainname) ]
 
@@ -103,7 +103,7 @@ def main():
         sys.exit(1)
 
     # Find the longest, most specific, zone.
-    zone_id = max(zones, key=len)
+    zone_id = max(zones, key=lambda x:len(x['Name']))['Id'].replace('/hostedzone/', '')
 
     # The API doesn't filter results. We can retrieve the required record
     # and everything that occurs after it lexicographically. We then have to
